@@ -1,34 +1,37 @@
-import { CharacterAI } from 'node_characterai';
+const puppeteer = require('puppeteer-extra');
+const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+puppeteer.use(StealthPlugin());
 
-export default async function handler(req, res) {
-  const { query } = req;
-  const { karakter, pesan } = query;
+const CharacterAI = require('node_characterai');
 
-  // Cek apakah ada karakter dan pesan yang diberikan
-  if (!karakter || !pesan) {
-    return res.status(400).json({ error: 'Karakter dan pesan wajib diberikan.' });
-  }
+module.exports = async (req, res) => {
+    try {
+        const { character, text } = req.query;
 
-  const characterAI = new CharacterAI();
+        if (!character || !text) {
+            return res.status(400).json({
+                error: "Parameter 'character' dan 'text' wajib diisi!",
+            });
+        }
 
-  try {
-    // Gunakan token untuk autentikasi
-    const token = 'YOUR_AUTH_TOKEN'; // Ganti dengan token autentikasi Anda
-    await characterAI.authenticateWithToken(token);
+        const characterAI = new CharacterAI();
+        await characterAI.authenticateWithToken('3c70cb2af0a4925c9c0e6f98d40ae6a745398079'); // Ganti dengan token Anda
 
-    // Gunakan ID karakter yang diteruskan dari query parameter
-    const characterId = karakter;
+        const browser = await puppeteer.launch({
+            headless: true,
+            args: ['--no-sandbox', '--disable-setuid-sandbox'], // Untuk server
+        });
 
-    // Membuat atau melanjutkan obrolan
-    const chat = await characterAI.createOrContinueChat(characterId);
+        const chat = await characterAI.createOrContinueChat(character);
+        const response = await chat.sendAndAwaitResponse(text, true);
 
-    // Kirim pesan dan tunggu respons
-    const response = await chat.sendAndAwaitResponse(pesan, true);
+        await browser.close();
 
-    // Kirimkan respons ke klien
-    return res.status(200).json({ response: response.text });
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ error: 'Terjadi kesalahan saat memproses permintaan.' });
-  }
-}
+        res.status(200).json({ response: response.text });
+    } catch (error) {
+        res.status(500).json({
+            error: "Terjadi kesalahan",
+            details: error.message,
+        });
+    }
+};
